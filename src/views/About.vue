@@ -369,7 +369,7 @@ const nextPhoto = () => {
 
 .profile-photo {
   width: 100%;
-  max-width: 300px;
+  max-width: 360px;
   height: auto;
   border-radius: 10px;
   border: 2px solid var(--border-color);

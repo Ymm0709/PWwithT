@@ -1,3 +1,5 @@
+# Additional Requirements I Implemented Using AI Assistance
+
 1.这是我的要求 根据这个设计网站：
 1. Project Goal
 Welcome to your Midterm PA! The goal of this assessment is for you to comprehensively apply your knowledge of Vue.js (Frontend) and Vite (Build Tool) to build a fully functional, responsive, professional, and unique personal brand website from scratch.
