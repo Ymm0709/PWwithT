@@ -6,6 +6,15 @@ import cors from 'cors'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import {
+  insertEvent,
+  queryEvents,
+  getAllEvents,
+  clearAllEvents,
+  getEventCount,
+  deleteOldEvents,
+  closeDatabase
+} from './db.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,9 +22,8 @@ const __dirname = path.dirname(__filename)
 const app = express()
 const PORT = process.env.PORT || 5707
 
-// 数据存储文件路径
+// 数据存储文件路径（保留用于兼容性，但不再使用）
 const DATA_DIR = path.join(__dirname, '../data/tracking')
-const TRACKING_FILE = path.join(DATA_DIR, 'events.json')
 const STATS_FILE = path.join(DATA_DIR, 'stats.json')
 
 // 确保数据目录存在
@@ -33,32 +41,27 @@ app.use(cors({
 }))
 app.use(express.json()) // 解析JSON请求体
 
-// 读取存储的事件数据
-function readEvents() {
+// 读取存储的事件数据（使用 SQLite）
+function readEvents(filters = {}) {
   try {
-    if (fs.existsSync(TRACKING_FILE)) {
-      const data = fs.readFileSync(TRACKING_FILE, 'utf8')
-      return JSON.parse(data)
-    }
+    return queryEvents(filters)
   } catch (error) {
     console.error('Error reading events:', error)
+    return []
   }
-  return []
 }
 
-// 写入事件数据
+// 写入事件数据（使用 SQLite）
 function writeEvent(event) {
   try {
-    const events = readEvents()
-    events.push(event)
+    const success = insertEvent(event)
     
-    // 限制文件大小，只保留最近的10000条记录
-    if (events.length > 10000) {
-      events.shift()
+    // 自动清理旧数据，只保留最近的10000条记录
+    if (success) {
+      deleteOldEvents(10000)
     }
     
-    fs.writeFileSync(TRACKING_FILE, JSON.stringify(events, null, 2))
-    return true
+    return success
   } catch (error) {
     console.error('Error writing event:', error)
     return false
@@ -1208,9 +1211,9 @@ app.delete('/api/clear-data', (req, res) => {
       })
     }
     
-    // 清空数据文件
+    // 清空数据库
     try {
-      fs.writeFileSync(TRACKING_FILE, JSON.stringify([], null, 2))
+      clearAllEvents()
       console.log('✅ 所有数据已清空')
       
       res.json({
@@ -1256,7 +1259,7 @@ app.get('/api/events', (req, res) => {
     res.json({
       success: true,
       events,
-      total: readEvents().length
+      total: getEventCount()
     })
   } catch (error) {
     console.error('Error in /api/events:', error)
@@ -1501,6 +1504,20 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /api/stats - 获取统计数据`)
   console.log(`   GET  /api/events - 获取事件列表`)
   console.log(`   GET  /api/health - 健康检查`)
+  console.log(`💾 使用 SQLite 数据库存储事件数据`)
+})
+
+// 优雅关闭：在进程退出时关闭数据库连接
+process.on('SIGINT', () => {
+  console.log('\n🛑 正在关闭服务器...')
+  closeDatabase()
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 正在关闭服务器...')
+  closeDatabase()
+  process.exit(0)
 })
 
 
