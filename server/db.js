@@ -55,7 +55,6 @@ async function initSQL() {
  * 加载数据库
  */
 async function loadDatabase() {
-  await ensureInitialized()
   if (!db) {
     const SQL = await initSQL()
     
@@ -66,7 +65,7 @@ async function loadDatabase() {
     } else {
       // 创建新数据库
       db = new SQL.Database()
-      await initializeDatabase()
+      await initializeDatabase(db)
       saveDatabase()
     }
   }
@@ -91,8 +90,9 @@ function saveDatabase() {
 /**
  * 初始化数据库表结构
  */
-async function initializeDatabase() {
-  const db = await loadDatabase()
+async function initializeDatabase(dbInstance) {
+  // 使用传入的数据库实例，避免循环依赖
+  const db = dbInstance || await loadDatabase()
   
   // 创建事件表
   db.run(`
