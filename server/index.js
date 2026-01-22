@@ -869,19 +869,31 @@ function getCountryFromIp(ip) {
 }
 
 /**
- * 计算用户地理位置分布
+ * 计算用户地理位置分布（按用户数量统计，而不是事件数量）
  */
 function calculateGeoDistribution(events) {
-  const geoMap = {}
+  // 使用Set来记录每个国家的用户，确保按用户数统计
+  const countryUsers = {}
   
+  // 只统计有clientIp和userId的事件，确保按用户数统计
   events.forEach(event => {
-    if (event.clientIp) {
+    if (event.clientIp && event.userId) {
       const country = getCountryFromIp(event.clientIp)
       // 过滤掉本地IP（Local），只显示真实地理位置
       if (country && country !== 'Local') {
-        geoMap[country] = (geoMap[country] || 0) + 1
+        if (!countryUsers[country]) {
+          countryUsers[country] = new Set()
+        }
+        // 使用userId作为唯一标识，Set会自动去重
+        countryUsers[country].add(event.userId)
       }
     }
+  })
+  
+  // 转换为用户数量统计
+  const geoMap = {}
+  Object.keys(countryUsers).forEach(country => {
+    geoMap[country] = countryUsers[country].size
   })
   
   // 转换为数组格式，方便前端使用
