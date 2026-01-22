@@ -5,6 +5,7 @@
 // 动态构建 API 基础 URL
 // 如果设置了环境变量，使用环境变量
 // 否则根据当前页面的 hostname 和协议构建，使用固定端口 5707
+// 注意：必须在运行时调用，不能在模块加载时计算
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL
@@ -20,8 +21,6 @@ const getApiBaseUrl = () => {
   // 默认值（SSR 或构建时）
   return 'http://localhost:5707/api'
 }
-
-const API_BASE_URL = getApiBaseUrl()
 
 /**
  * 获取用户唯一标识（从localStorage或生成新ID）
@@ -88,6 +87,9 @@ async function trackEvent(eventType, eventData = {}) {
       device: getDeviceInfo(),
       ...eventData // 允许传入额外的自定义数据
     }
+
+    // 在运行时动态获取 API URL
+    const API_BASE_URL = getApiBaseUrl()
 
     // 使用fetch API发送数据（AJAX异步请求）
     const response = await fetch(`${API_BASE_URL}/track`, {
