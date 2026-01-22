@@ -51,12 +51,13 @@ echo ""
 
 # 使用 nohup 在后台运行
 # 使用 npx serve 无需全局安装，监听 0.0.0.0 以允许外部访问
+# serve 的 -l 参数只接受端口号，需要通过 HOST 环境变量设置监听地址
 nohup npx concurrently \
   -n "前端,后端,仪表盘" \
   -c "cyan,magenta,yellow" \
-  "npx serve -s dist -l 0.0.0.0:5771" \
+  "HOST=0.0.0.0 npx serve -s dist -l 5771" \
   "npm run server" \
-  "npx serve -s analytics-react/dist -l 0.0.0.0:5767" \
+  "HOST=0.0.0.0 npx serve -s analytics-react/dist -l 5767" \
   > logs/app.log 2>&1 &
 
 PID=$!
