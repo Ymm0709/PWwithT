@@ -11,11 +11,18 @@
 </template>
 
 <script setup>
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Navbar from './components/Navbar.vue'
 import { provideLanguage } from './composables/useLanguage'
+import { usePageTracking } from './composables/usePageTracking'
 
 // 提供语言功能给所有子组件，并获取翻译函数用于当前组件
 const { t } = provideLanguage()
+
+// 全局页面追踪（自动追踪所有页面的停留时长和滚动深度）
+const route = useRoute()
+usePageTracking()
 </script>
 
 <style>

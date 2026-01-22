@@ -5,9 +5,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build output
 dist
 dist-ssr
 *.local
@@ -23,6 +25,3 @@ dist-ssr
 *.sln
 *.sw?
 
-# 埋点数据文件（包含用户行为数据，不应该提交到Git）
-data/tracking/
-*.json.backup

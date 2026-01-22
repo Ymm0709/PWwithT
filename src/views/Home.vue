@@ -11,14 +11,14 @@
           <h1 class="hero-title">{{ t('home.title') }}</h1>
           <p class="hero-subtitle">{{ t('home.subtitle') }}</p>
           <div class="contact-links">
-            <button @click="showEmailModal = true" class="contact-link" title="Email">
+            <button @click="handleEmailClick" class="contact-link" title="Email">
               <svg class="contact-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               <span class="contact-link-text">Email</span>
             </button>
-            <a href="https://github.com/Ymm0709" target="_blank" rel="noopener noreferrer" class="contact-link" title="GitHub">
+            <a href="https://github.com/Ymm0709" target="_blank" rel="noopener noreferrer" class="contact-link" title="GitHub" @click="handleGitHubClick">
               <svg class="contact-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
@@ -30,9 +30,9 @@
     </section>
 
     <!-- Email Modal -->
-    <div v-if="showEmailModal" class="modal-overlay" @click="showEmailModal = false">
+    <div v-if="showEmailModal" class="modal-overlay" @click="closeEmailModal">
       <div class="modal-content" @click.stop>
-        <button class="modal-close" @click="showEmailModal = false">&times;</button>
+        <button class="modal-close" @click="closeEmailModal">&times;</button>
         <div class="modal-body">
           <svg class="modal-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -49,19 +49,19 @@
       <div class="container">
         <h2 class="section-title">{{ t('home.quickNav') }}</h2>
         <div class="links-grid">
-          <router-link to="/about" class="link-card">
+          <router-link to="/about" class="link-card" @click="handleNavCardClick('/about', t('home.aboutMe'))">
             <h3>{{ t('home.aboutMe') }}</h3>
             <p>{{ t('home.aboutMeDesc') }}</p>
           </router-link>
-          <router-link to="/skills" class="link-card">
+          <router-link to="/skills" class="link-card" @click="handleNavCardClick('/skills', t('home.skills'))">
             <h3>{{ t('home.skills') }}</h3>
             <p>{{ t('home.skillsDesc') }}</p>
           </router-link>
-          <router-link to="/projects" class="link-card">
+          <router-link to="/projects" class="link-card" @click="handleNavCardClick('/projects', t('home.projects'))">
             <h3>{{ t('home.projects') }}</h3>
             <p>{{ t('home.projectsDesc') }}</p>
           </router-link>
-          <router-link to="/blog" class="link-card">
+          <router-link to="/blog" class="link-card" @click="handleNavCardClick('/blog', t('home.blog'))">
             <h3>{{ t('home.blog') }}</h3>
             <p>{{ t('home.blogDesc') }}</p>
           </router-link>
@@ -74,20 +74,61 @@
 <script setup>
 import { ref } from 'vue'
 import { injectLanguage } from '../composables/useLanguage'
+import { useTracking } from '../composables/useTracking'
+import { usePageTracking } from '../composables/usePageTracking'
 
 const { t } = injectLanguage()
+const { trackButtonClick, trackLinkClick, trackConversion } = useTracking()
+
+// 启用页面追踪（自动追踪停留时长和滚动深度）
+usePageTracking()
+
 const showEmailModal = ref(false)
 
+// Email按钮点击
+const handleEmailClick = () => {
+  showEmailModal.value = true
+  trackButtonClick('email_button', { page: '/' })
+  trackConversion('email_modal_opened', { page: '/' })
+}
+
+// GitHub链接点击
+const handleGitHubClick = () => {
+  trackLinkClick('https://github.com/Ymm0709', 'GitHub Profile')
+  trackConversion('github_link_clicked', { 
+    linkUrl: 'https://github.com/Ymm0709',
+    page: '/'
+  })
+}
+
+// 复制邮箱
 const copyEmail = async () => {
   const email = 'yung230630047@126.com'
+  trackButtonClick('copy_email', { email, page: '/' })
+  trackConversion('email_copied', { email, page: '/' })
+  
   try {
     await navigator.clipboard.writeText(email)
-    // 可以添加一个提示，表示已复制
     alert('邮箱地址已复制到剪贴板！')
   } catch (err) {
-    // 如果复制失败，可以回退到其他方法
     console.error('复制失败:', err)
   }
+}
+
+// 关闭模态框
+const closeEmailModal = () => {
+  showEmailModal.value = false
+  trackButtonClick('close_email_modal', { page: '/' })
+}
+
+// 导航卡片点击（内部链接）
+const handleNavCardClick = (path, name) => {
+  trackLinkClick(path, name)
+  trackConversion('nav_card_clicked', { 
+    targetPage: path,
+    cardName: name,
+    page: '/'
+  })
 }
 </script>
 

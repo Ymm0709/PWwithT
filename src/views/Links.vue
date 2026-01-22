@@ -13,7 +13,13 @@
             <div class="link-icon">{{ link.icon }}</div>
             <h3>{{ link.title }}</h3>
             <p>{{ link.description }}</p>
-            <a :href="link.url" target="_blank" rel="noopener noreferrer" class="link-button">
+            <a 
+              :href="link.url" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              class="link-button"
+              @click="handleLinkClick(link.url, link.title)"
+            >
               {{ t('links.visitSite') }}
             </a>
           </div>
@@ -26,8 +32,14 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { injectLanguage } from '../composables/useLanguage'
+import { useTracking } from '../composables/useTracking'
+import { usePageTracking } from '../composables/usePageTracking'
 
 const { t, currentLanguage } = injectLanguage()
+const { trackLinkClick, trackConversion } = useTracking()
+
+// 启用页面追踪（自动追踪停留时长和滚动深度）
+usePageTracking()
 
 const allLinks = ref([
   {
@@ -102,6 +114,16 @@ const translatedLinks = computed(() => {
     description: t(`links.${link.descKey}`)
   }))
 })
+
+// 处理链接点击
+const handleLinkClick = (url, title) => {
+  trackLinkClick(url, title)
+  trackConversion('external_link_clicked', {
+    linkUrl: url,
+    linkTitle: title,
+    page: '/links'
+  })
+}
 </script>
 
 <style scoped>

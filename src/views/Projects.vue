@@ -47,7 +47,7 @@
                 :href="project.githubUrl" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                @click.stop
+                @click.stop="handleGitHubClick(project.githubUrl, project.name, $event)"
                 class="project-link github-button"
               >
                 {{ t('projects.github') }}
@@ -57,7 +57,7 @@
                 :href="project.demoUrl" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                @click.stop
+                @click.stop="handleDemoClick(project.demoUrl, project.name, $event)"
                 :class="project.githubUrl ? 'project-link' : 'project-link github-button'"
               >
                 {{ t('projects.demo') }}
@@ -74,10 +74,17 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { injectLanguage } from '../composables/useLanguage'
+import { useTracking } from '../composables/useTracking'
+import { usePageTracking } from '../composables/usePageTracking'
 
 const router = useRouter()
 const route = useRoute()
 const { currentLanguage, t, translateTechnology } = injectLanguage()
+const { trackLinkClick, trackConversion } = useTracking()
+
+// 启用页面追踪（自动追踪停留时长和滚动深度）
+usePageTracking()
+
 const projects = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -111,10 +118,42 @@ watch(currentLanguage, () => {
 })
 
 const goToProject = (id) => {
+  // 追踪项目卡片点击
+  const project = projects.value.find(p => p.id === id)
+  if (project) {
+    trackConversion('project_card_clicked', {
+      projectId: id,
+      projectName: project.name,
+      page: '/projects'
+    })
+  }
+  
   // 保存当前滚动位置
   const scrollPosition = window.scrollY || window.pageYOffset || document.documentElement.scrollTop
   sessionStorage.setItem('projectsScrollPosition', scrollPosition.toString())
   router.push(`/projects/${id}`)
+}
+
+// 处理GitHub链接点击
+const handleGitHubClick = (url, projectName, event) => {
+  event.stopPropagation()
+  trackLinkClick(url, `GitHub - ${projectName}`)
+  trackConversion('project_github_clicked', {
+    projectName: projectName,
+    linkUrl: url,
+    page: '/projects'
+  })
+}
+
+// 处理Demo链接点击
+const handleDemoClick = (url, projectName, event) => {
+  event.stopPropagation()
+  trackLinkClick(url, `Demo - ${projectName}`)
+  trackConversion('project_demo_clicked', {
+    projectName: projectName,
+    linkUrl: url,
+    page: '/projects'
+  })
 }
 
 const restoreScrollPosition = () => {

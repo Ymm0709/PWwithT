@@ -68,6 +68,7 @@
               target="_blank" 
               rel="noopener noreferrer"
               class="btn"
+              @click="handleGitHubClick(project.githubUrl, project.name)"
             >
               {{ t('projects.detail.viewGithub') }}
             </a>
@@ -77,6 +78,7 @@
               target="_blank" 
               rel="noopener noreferrer"
               class="btn btn-secondary"
+              @click="handleDemoClick(project.demoUrl, project.name)"
             >
               {{ t('projects.detail.liveDemo') }}
             </a>
@@ -96,10 +98,17 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { injectLanguage } from '../composables/useLanguage'
+import { useTracking } from '../composables/useTracking'
+import { usePageTracking } from '../composables/usePageTracking'
 
 const router = useRouter()
 const route = useRoute()
 const { currentLanguage, t, translateTechnology } = injectLanguage()
+const { trackLinkClick, trackConversion } = useTracking()
+
+// 启用页面追踪（自动追踪停留时长和滚动深度）
+usePageTracking()
+
 const project = ref(null)
 const loading = ref(true)
 const error = ref(null)
@@ -127,6 +136,12 @@ const fetchProject = async () => {
     
     if (foundProject) {
       project.value = foundProject
+      // 追踪项目详情页查看
+      trackConversion('project_detail_viewed', {
+        projectId: projectId,
+        projectName: foundProject.name,
+        page: `/projects/${projectId}`
+      })
     } else {
       error.value = 'Project not found'
     }
@@ -142,6 +157,28 @@ const fetchProject = async () => {
 watch(currentLanguage, () => {
   fetchProject()
 })
+
+// 处理GitHub链接点击
+const handleGitHubClick = (url, projectName) => {
+  trackLinkClick(url, `GitHub - ${projectName}`)
+  trackConversion('project_detail_github_clicked', {
+    projectName: projectName,
+    linkUrl: url,
+    projectId: route.params.id,
+    page: `/projects/${route.params.id}`
+  })
+}
+
+// 处理Demo链接点击
+const handleDemoClick = (url, projectName) => {
+  trackLinkClick(url, `Demo - ${projectName}`)
+  trackConversion('project_detail_demo_clicked', {
+    projectName: projectName,
+    linkUrl: url,
+    projectId: route.params.id,
+    page: `/projects/${route.params.id}`
+  })
+}
 
 const goBack = () => {
   router.push('/projects')
