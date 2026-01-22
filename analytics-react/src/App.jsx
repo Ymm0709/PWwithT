@@ -3,7 +3,26 @@ import ReactECharts from 'echarts-for-react'
 import './App.css'
 import { useLanguage } from './useLanguage'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5707/api'
+// 动态构建 API 基础 URL
+// 如果设置了环境变量，使用环境变量
+// 否则根据当前页面的 hostname 和协议构建，使用固定端口 5707
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  
+  // 在浏览器环境中，使用当前页面的 hostname 和协议
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol
+    const hostname = window.location.hostname
+    return `${protocol}//${hostname}:5707/api`
+  }
+  
+  // 默认值（SSR 或构建时）
+  return 'http://localhost:5707/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // 页面路径到可读名称的映射（支持多语言）
 const getPageLabel = (path, t) => {

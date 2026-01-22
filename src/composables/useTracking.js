@@ -2,7 +2,26 @@
 // 用于收集用户行为数据并通过AJAX发送到后端服务器
 
 // API接口地址配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5707/api'
+// 动态构建 API 基础 URL
+// 如果设置了环境变量，使用环境变量
+// 否则根据当前页面的 hostname 和协议构建，使用固定端口 5707
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  
+  // 在浏览器环境中，使用当前页面的 hostname 和协议
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol
+    const hostname = window.location.hostname
+    return `${protocol}//${hostname}:5707/api`
+  }
+  
+  // 默认值（SSR 或构建时）
+  return 'http://localhost:5707/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 /**
  * 获取用户唯一标识（从localStorage或生成新ID）
