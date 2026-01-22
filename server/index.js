@@ -1333,8 +1333,9 @@ app.use((req, res) => {
 })
 
 // 启动服务器
-app.listen(PORT, () => {
-  console.log(`📊 Tracking Server is running on http://localhost:${PORT}`)
+// 监听 0.0.0.0 以允许外部访问
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`📊 Tracking Server is running on http://0.0.0.0:${PORT}`)
   console.log(`📈 API endpoints:`)
   console.log(`   GET  / - 服务器信息`)
   console.log(`   GET  /api - API端点列表`)

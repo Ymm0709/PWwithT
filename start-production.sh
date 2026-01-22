@@ -53,12 +53,13 @@ echo "停止服务: pkill -f concurrently 或 ./stop-production.sh"
 echo ""
 
 # 使用 nohup 在后台运行
+# serve 命令使用 -l 0.0.0.0:PORT 监听所有网络接口
 nohup npx concurrently \
   -n "前端,后端,仪表盘" \
   -c "cyan,magenta,yellow" \
-  "serve -s dist -l 5771" \
+  "serve -s dist -l 0.0.0.0:5771" \
   "npm run server" \
-  "serve -s analytics-react/dist -l 5767" \
+  "serve -s analytics-react/dist -l 0.0.0.0:5767" \
   > logs/app.log 2>&1 &
 
 PID=$!
