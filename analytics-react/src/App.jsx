@@ -22,7 +22,8 @@ const getApiBaseUrl = () => {
   return 'http://localhost:5707/api'
 }
 
-const API_BASE_URL = getApiBaseUrl()
+// 注意：不在模块加载时计算 API_BASE_URL，而是在运行时动态获取
+// 这样可以确保使用正确的 hostname（服务器 IP 而不是 localhost）
 
 // 页面路径到可读名称的映射（支持多语言）
 const getPageLabel = (path, t) => {
@@ -94,6 +95,7 @@ function App() {
     setLoading(true)
     setError(null)
     try {
+      const API_BASE_URL = getApiBaseUrl() // 运行时动态获取
       const res = await fetch(`${API_BASE_URL}/stats`)
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const json = await res.json()
@@ -116,6 +118,7 @@ function App() {
     // 每30秒自动刷新（静默刷新，不显示加载状态）
     const interval = setInterval(() => {
       // 静默刷新，不显示loading状态，直接更新数据
+      const API_BASE_URL = getApiBaseUrl() // 运行时动态获取
       fetch(`${API_BASE_URL}/stats`)
         .then(res => {
           if (!res.ok) return
@@ -145,6 +148,7 @@ function App() {
     setClearing(true)
     setError(null)
     try {
+      const API_BASE_URL = getApiBaseUrl() // 运行时动态获取
       const res = await fetch(`${API_BASE_URL}/clear-data`, {
         method: 'DELETE',
         headers: {
