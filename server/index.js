@@ -1297,6 +1297,158 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// 提供追踪脚本
+app.get('/tracking.js', (req, res) => {
+  const trackingScript = `
+(function() {
+  'use strict';
+  const API_BASE_URL = 'http://110.40.153.38:5707/api';
+  function getUserId() {
+    let userId = localStorage.getItem('tracking_user_id');
+    if (!userId) {
+      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('tracking_user_id', userId);
+    }
+    return userId;
+  }
+  function getSessionId() {
+    let sessionId = sessionStorage.getItem('tracking_session_id');
+    if (!sessionId) {
+      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('tracking_session_id', sessionId);
+    }
+    return sessionId;
+  }
+  function getDeviceInfo() {
+    return {
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      platform: navigator.platform,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  }
+  async function trackEvent(eventType, eventData = {}) {
+    try {
+      const trackingData = {
+        event: eventType,
+        timestamp: new Date().toISOString(),
+        userId: getUserId(),
+        sessionId: getSessionId(),
+        url: window.location.href,
+        path: window.location.pathname,
+        referrer: document.referrer || '',
+        device: getDeviceInfo(),
+        ...eventData
+      };
+      const response = await fetch(API_BASE_URL + '/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(trackingData),
+        keepalive: true
+      });
+      if (!response.ok) throw new Error('HTTP error! status: ' + response.status);
+      const result = await response.json();
+      console.log('[Tracking] Event sent:', eventType, result);
+      return result;
+    } catch (error) {
+      console.error('[Tracking] Error sending event:', eventType, error);
+      return null;
+    }
+  }
+  function trackPageView() {
+    return trackEvent('page_view', {
+      page: window.location.pathname,
+      pageName: document.title
+    });
+  }
+  let scrollTracked = { 25: false, 50: false, 75: false, 100: false };
+  function handleScroll() {
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const scrollPercent = Math.round((scrollTop / (documentHeight - windowHeight)) * 100);
+    if (scrollPercent >= 25 && !scrollTracked[25]) {
+      trackEvent('scroll_depth', { scrollPercent: 25, milestone: '25%' });
+      scrollTracked[25] = true;
+    }
+    if (scrollPercent >= 50 && !scrollTracked[50]) {
+      trackEvent('scroll_depth', { scrollPercent: 50, milestone: '50%' });
+      scrollTracked[50] = true;
+    }
+    if (scrollPercent >= 75 && !scrollTracked[75]) {
+      trackEvent('scroll_depth', { scrollPercent: 75, milestone: '75%' });
+      scrollTracked[75] = true;
+    }
+    if (scrollPercent >= 100 && !scrollTracked[100]) {
+      trackEvent('scroll_depth', { scrollPercent: 100, milestone: '100%' });
+      scrollTracked[100] = true;
+    }
+  }
+  let startTime = Date.now();
+  function trackPageTime() {
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    if (duration > 0) {
+      trackEvent('time_on_page', { duration: duration });
+    }
+  }
+  function trackLinkClicks() {
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('a');
+      if (link && link.href) {
+        trackEvent('link_click', {
+          linkUrl: link.href,
+          linkText: link.textContent || ''
+        });
+      }
+    });
+  }
+  function trackButtonClicks() {
+    document.addEventListener('click', function(e) {
+      if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        const button = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
+        trackEvent('button_click', {
+          buttonName: button.textContent || button.id || button.className || 'unknown'
+        });
+      }
+    });
+  }
+  function init() {
+    trackPageView();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        trackPageTime();
+      } else {
+        startTime = Date.now();
+      }
+    });
+    window.addEventListener('beforeunload', function() {
+      trackPageTime();
+    });
+    trackLinkClicks();
+    trackButtonClicks();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  window.tracking = {
+    track: trackEvent,
+    trackPageView: trackPageView,
+    trackEvent: trackEvent
+  };
+})();
+  `.trim();
+  
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(trackingScript);
+})
+
 // 根路径 - 重定向到 API 信息
 app.get('/', (req, res) => {
   res.json({
