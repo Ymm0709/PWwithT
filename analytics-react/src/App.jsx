@@ -96,7 +96,14 @@ function App() {
     setError(null)
     try {
       const API_BASE_URL = getApiBaseUrl() // 运行时动态获取
-      console.log('[Analytics] Fetching stats from:', API_BASE_URL, 'Current hostname:', window.location.hostname)
+      console.log('[Analytics] ===== API URL 调试信息 =====')
+      console.log('[Analytics] 当前页面 URL:', window.location.href)
+      console.log('[Analytics] 当前 hostname:', window.location.hostname)
+      console.log('[Analytics] 当前 protocol:', window.location.protocol)
+      console.log('[Analytics] 环境变量 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL)
+      console.log('[Analytics] 计算得到的 API_BASE_URL:', API_BASE_URL)
+      console.log('[Analytics] 完整请求 URL:', `${API_BASE_URL}/stats`)
+      console.log('[Analytics] ============================')
       const res = await fetch(`${API_BASE_URL}/stats`)
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const json = await res.json()
