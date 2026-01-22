@@ -42,9 +42,9 @@ app.use(cors({
 app.use(express.json()) // 解析JSON请求体
 
 // 读取存储的事件数据（使用 SQLite）
-function readEvents(filters = {}) {
+async function readEvents(filters = {}) {
   try {
-    return queryEvents(filters)
+    return await queryEvents(filters)
   } catch (error) {
     console.error('Error reading events:', error)
     return []
@@ -52,15 +52,9 @@ function readEvents(filters = {}) {
 }
 
 // 写入事件数据（使用 SQLite）
-function writeEvent(event) {
+async function writeEvent(event) {
   try {
-    const success = insertEvent(event)
-    
-    // 自动清理旧数据，只保留最近的10000条记录
-    if (success) {
-      deleteOldEvents(10000)
-    }
-    
+    const success = await insertEvent(event)
     return success
   } catch (error) {
     console.error('Error writing event:', error)
@@ -295,9 +289,9 @@ function calculateOnlineUsers(events) {
  * 新用户：session第一次出现（新session）
  * 老用户：session之前已经存在过（老session）
  */
-function calculateNewVsReturningUsers(events) {
+async function calculateNewVsReturningUsers(events) {
   // 获取所有历史事件（用于判断session是否首次出现）
-  const allEvents = readEvents()
+  const allEvents = await readEvents()
   
   // 记录每个session在整个历史记录中的第一次出现时间
   const sessionFirstAppearance = {}
@@ -919,7 +913,7 @@ function calculateGeoDistribution(events) {
  *   ...其他自定义数据
  * }
  */
-app.post('/api/track', (req, res) => {
+app.post('/api/track', async (req, res) => {
   try {
     // 获取客户端IP地址（优先从代理头获取）
     let clientIp = req.headers['x-forwarded-for'] || req.headers['cf-connecting-ip']
@@ -958,7 +952,7 @@ app.post('/api/track', (req, res) => {
     }
 
     // 保存事件数据
-    const success = writeEvent(eventData)
+    const success = await writeEvent(eventData)
 
     if (success) {
       res.json({
@@ -990,10 +984,10 @@ app.post('/api/track', (req, res) => {
  * - endDate: 结束日期（可选）
  * - page: 页面路径筛选（可选）
  */
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   try {
     const { event, startDate, endDate, page } = req.query
-    const events = readEvents()
+    const events = await readEvents()
 
     // 过滤数据
     let filteredEvents = events
@@ -1153,7 +1147,7 @@ app.get('/api/stats', (req, res) => {
 
     // 新增指标：在线用户数（最近5分钟内有活动的用户）
     // 注意：在线用户需要从所有事件中计算，而不仅仅是筛选后的事件
-    const allEvents = readEvents()
+    const allEvents = await readEvents()
     stats.onlineUsers = calculateOnlineUsers(allEvents)
 
     // 新增指标：跳出率
@@ -1169,7 +1163,7 @@ app.get('/api/stats', (req, res) => {
     stats.geoDistribution = calculateGeoDistribution(filteredEvents)
 
     // 新增指标：新老用户统计
-    stats.newVsReturningUsers = calculateNewVsReturningUsers(filteredEvents)
+    stats.newVsReturningUsers = await calculateNewVsReturningUsers(filteredEvents)
 
     res.json({
       success: true,
@@ -1190,7 +1184,7 @@ app.get('/api/stats', (req, res) => {
  * 清空所有数据（需要密码验证）
  * 请求体：{ "password": "..." }
  */
-app.delete('/api/clear-data', (req, res) => {
+app.delete('/api/clear-data', async (req, res) => {
   try {
     const { password } = req.body
     
@@ -1213,7 +1207,7 @@ app.delete('/api/clear-data', (req, res) => {
     
     // 清空数据库
     try {
-      clearAllEvents()
+      await clearAllEvents()
       console.log('✅ 所有数据已清空')
       
       res.json({
@@ -1240,10 +1234,10 @@ app.delete('/api/clear-data', (req, res) => {
  * GET /api/events
  * 获取原始事件列表（用于调试）
  */
-app.get('/api/events', (req, res) => {
+app.get('/api/events', async (req, res) => {
   try {
     const { limit = 100, event, page } = req.query
-    let events = readEvents()
+    let events = await readEvents()
 
     // 过滤
     if (event) {
@@ -1259,7 +1253,7 @@ app.get('/api/events', (req, res) => {
     res.json({
       success: true,
       events,
-      total: getEventCount()
+      total: await getEventCount()
     })
   } catch (error) {
     console.error('Error in /api/events:', error)
