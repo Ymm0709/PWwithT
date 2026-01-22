@@ -1,7 +1,7 @@
 // scripts/simulate-requests.js
 // 模拟用户行为请求，用于测试埋点系统
 
-const API_BASE_URL = process.env.API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = process.env.API_URL || 'http://localhost:5707/api'
 
 // 生成随机用户ID
 function generateUserId() {
@@ -424,8 +424,8 @@ async function main() {
     
     console.log('\n💡 请确保：')
     console.log('   1. 后端服务器正在运行: npm run server')
-    console.log('   2. 服务器运行在 http://localhost:3000')
-    console.log('   3. 可以手动测试: curl http://localhost:3000/api/health')
+    console.log('   2. 服务器运行在 http://localhost:5707')
+    console.log('   3. 可以手动测试: curl http://localhost:5707/api/health')
     process.exit(1)
   }
 

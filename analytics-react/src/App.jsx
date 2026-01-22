@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react'
 import './App.css'
 import { useLanguage } from './useLanguage'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5707/api'
 
 // 页面路径到可读名称的映射（支持多语言）
 const getPageLabel = (path, t) => {

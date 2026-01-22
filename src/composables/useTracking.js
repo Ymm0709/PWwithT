@@ -2,7 +2,7 @@
 // 用于收集用户行为数据并通过AJAX发送到后端服务器
 
 // API接口地址配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5707/api'
 
 /**
  * 获取用户唯一标识（从localStorage或生成新ID）

@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 5707
 
 // 数据存储文件路径
 const DATA_DIR = path.join(__dirname, '../data/tracking')
@@ -1306,10 +1306,10 @@ app.get('/', (req, res) => {
       'GET /api/health': '健康检查'
     },
     quickStart: {
-      viewEndpoints: '访问 http://localhost:3000/api 查看所有端点',
-      trackEvent: 'POST http://localhost:3000/api/track',
-      viewStats: 'GET http://localhost:3000/api/stats',
-      healthCheck: 'GET http://localhost:3000/api/health'
+      viewEndpoints: '访问 http://localhost:5707/api 查看所有端点',
+      trackEvent: 'POST http://localhost:5707/api/track',
+      viewStats: 'GET http://localhost:5707/api/stats',
+      healthCheck: 'GET http://localhost:5707/api/health'
     }
   })
 })
@@ -1328,7 +1328,7 @@ app.use((req, res) => {
       'GET /api/events': '获取事件列表',
       'GET /api/health': '健康检查'
     },
-    tip: '访问 http://localhost:3000/api 查看所有可用端点'
+    tip: '访问 http://localhost:5707/api 查看所有可用端点'
   })
 })
 
