@@ -27,17 +27,24 @@ let db = null
  */
 async function initSQL() {
   if (!SQL) {
+    // 使用 process.cwd() 获取项目根目录，确保路径正确
+    const projectRoot = process.cwd()
+    const wasmPath = path.join(projectRoot, 'node_modules/sql.js/dist/sql-wasm.wasm')
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(wasmPath)) {
+      console.error(`❌ 找不到 WASM 文件: ${wasmPath}`)
+      console.error(`   请确保 sql.js 已正确安装: npm install sql.js`)
+      throw new Error(`WASM file not found: ${wasmPath}`)
+    }
+    
+    console.log(`✅ 使用 WASM 文件: ${wasmPath}`)
+    
     SQL = await initSqlJs({
       locateFile: (file) => {
-        // sql.js 的 wasm 文件路径
-        // 尝试从 node_modules 加载
-        const wasmPath = path.join(__dirname, '../../node_modules/sql.js/dist', file)
-        if (fs.existsSync(wasmPath)) {
-          return wasmPath
-        }
-        // 如果找不到，尝试相对路径
-        const relativePath = path.join(__dirname, '../../node_modules/sql.js/dist', file)
-        return relativePath
+        // 始终使用项目根目录下的 node_modules
+        const filePath = path.join(projectRoot, 'node_modules/sql.js/dist', file)
+        return filePath
       }
     })
   }
