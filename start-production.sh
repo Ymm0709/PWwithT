@@ -30,11 +30,8 @@ if [ ! -d "analytics-react/dist" ]; then
   echo "✅ 分析仪表盘构建完成"
 fi
 
-# 检查是否安装了 serve（用于 serve 静态文件）
-if ! command -v serve &> /dev/null; then
-  echo "📦 安装 serve..."
-  npm install -g serve
-fi
+# 不需要全局安装 serve，直接使用 npx serve
+# npx 会自动处理，无需全局安装
 
 # 创建日志目录
 mkdir -p logs
@@ -53,13 +50,13 @@ echo "停止服务: pkill -f concurrently 或 ./stop-production.sh"
 echo ""
 
 # 使用 nohup 在后台运行
-# serve 命令使用 -l 0.0.0.0:PORT 监听所有网络接口
+# 使用 npx serve 无需全局安装，监听 0.0.0.0 以允许外部访问
 nohup npx concurrently \
   -n "前端,后端,仪表盘" \
   -c "cyan,magenta,yellow" \
-  "serve -s dist -l 0.0.0.0:5771" \
+  "npx serve -s dist -l 0.0.0.0:5771" \
   "npm run server" \
-  "serve -s analytics-react/dist -l 0.0.0.0:5767" \
+  "npx serve -s analytics-react/dist -l 0.0.0.0:5767" \
   > logs/app.log 2>&1 &
 
 PID=$!
