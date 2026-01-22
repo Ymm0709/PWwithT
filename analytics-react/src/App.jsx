@@ -96,6 +96,7 @@ function App() {
     setError(null)
     try {
       const API_BASE_URL = getApiBaseUrl() // 运行时动态获取
+      console.log('[Analytics] Fetching stats from:', API_BASE_URL, 'Current hostname:', window.location.hostname)
       const res = await fetch(`${API_BASE_URL}/stats`)
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const json = await res.json()

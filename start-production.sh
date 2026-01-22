@@ -18,8 +18,14 @@ if [ ! -d "dist" ]; then
 fi
 
 # 检查是否已构建分析仪表盘
-if [ ! -d "analytics-react/dist" ]; then
-  echo "📦 分析仪表盘未构建，正在构建..."
+# 如果存在 REBUILD 环境变量，强制重新构建
+if [ ! -d "analytics-react/dist" ] || [ "$REBUILD" = "true" ]; then
+  if [ "$REBUILD" = "true" ]; then
+    echo "🔄 强制重新构建分析仪表盘..."
+    rm -rf analytics-react/dist
+  else
+    echo "📦 分析仪表盘未构建，正在构建..."
+  fi
   cd analytics-react
   npm run build
   cd ..
