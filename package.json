@@ -15,7 +15,8 @@
     "test:tracking:3": "node scripts/simulate-requests.js 3",
     "test:tracking:5": "node scripts/simulate-requests.js 5",
     "test:tracking:10": "node scripts/simulate-requests.js 10",
-    "migrate:sqlite": "node scripts/migrate-to-sqlite.js"
+    "migrate:sqlite": "node scripts/migrate-to-sqlite.js",
+    "init:db": "node scripts/init-database.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
