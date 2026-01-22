@@ -24,7 +24,13 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // 中间件配置
-app.use(cors()) // 允许跨域请求
+// CORS 配置：允许所有来源的跨域请求（生产环境可以限制特定域名）
+app.use(cors({
+  origin: '*', // 允许所有来源，生产环境可以设置为 ['http://yourdomain.com', 'https://yourdomain.com']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Forwarded-For', 'X-Real-IP', 'CF-Connecting-IP'],
+  credentials: false // 如果设置为 true，origin 不能是 '*'
+}))
 app.use(express.json()) // 解析JSON请求体
 
 // 读取存储的事件数据
