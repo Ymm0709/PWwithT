@@ -73,7 +73,9 @@ function calculateBehaviorFlow(events) {
       if (!sessions[event.sessionId]) {
         sessions[event.sessionId] = {
           pages: [],
-          referrer: event.referrer || '' // 记录会话的第一个referrer作为访问来源
+          referrer: event.referrer || '', // 记录会话的第一个referrer作为访问来源（fallback）
+          trafficSource: event.traffic_source || '', // 优先使用前端识别的来源
+          trafficChannel: event.traffic_channel || '' // 可选：渠道（Direct/Organic/Social/Referral/Paid...）
         }
       }
       sessions[event.sessionId].pages.push({
@@ -85,6 +87,13 @@ function calculateBehaviorFlow(events) {
       // 如果还没有referrer，使用第一个事件的referrer
       if (!sessions[event.sessionId].referrer && event.referrer) {
         sessions[event.sessionId].referrer = event.referrer
+      }
+      // 如果还没有trafficSource/trafficChannel，使用第一个有值的事件
+      if (!sessions[event.sessionId].trafficSource && event.traffic_source) {
+        sessions[event.sessionId].trafficSource = event.traffic_source
+      }
+      if (!sessions[event.sessionId].trafficChannel && event.traffic_channel) {
+        sessions[event.sessionId].trafficChannel = event.traffic_channel
       }
     }
   })
@@ -99,17 +108,18 @@ function calculateBehaviorFlow(events) {
     // 按时间排序
     session.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
     
-    // 统计访问来源（更详细的识别）
+    // 统计访问来源（优先使用前端识别的 traffic_source；否则用 referrer 推断）
     const referrer = sessionData.referrer || ''
-    let referrerLabel = '直接访问'
+    const trafficSource = sessionData.trafficSource || ''
+    let sourceLabel = trafficSource || '直接访问'
     
-    if (referrer) {
+    if (!trafficSource && referrer) {
       try {
         // 判断是否是内部链接 - 如果是，也归类为"直接访问"
         if (referrer.includes('localhost') || referrer.includes('127.0.0.1') || 
             referrer.startsWith('/') || referrer.startsWith('./')) {
           // 内部链接也归类为"直接访问"
-          referrerLabel = '直接访问'
+          sourceLabel = '直接访问'
         } else {
           // 外部来源：识别常见平台
           try {
@@ -157,26 +167,26 @@ function calculateBehaviorFlow(events) {
             
             // 检查是否是已知平台
             if (platformMap[hostname]) {
-              referrerLabel = platformMap[hostname]
+              sourceLabel = platformMap[hostname]
             } else {
               // 提取主域名（去掉www和子域名）
               const domainParts = hostname.split('.')
               if (domainParts.length >= 2) {
                 const mainDomain = domainParts.slice(-2).join('.')
-                referrerLabel = mainDomain.replace(/^www\./, '')
+                sourceLabel = mainDomain.replace(/^www\./, '')
               } else {
-                referrerLabel = hostname
+                sourceLabel = hostname
               }
             }
           } catch {
-            referrerLabel = '外部来源'
+            sourceLabel = '外部来源'
           }
         }
       } catch {
-        referrerLabel = '外部来源'
+        sourceLabel = '外部来源'
       }
     }
-    referrerStats[referrerLabel] = (referrerStats[referrerLabel] || 0) + 1
+    referrerStats[sourceLabel] = (referrerStats[sourceLabel] || 0) + 1
     
     // 生成路径字符串（包含访问来源）
     const path = session.map(p => p.page).join(' → ')
@@ -185,7 +195,7 @@ function calculateBehaviorFlow(events) {
     // 统计页面转换（从访问来源到第一个页面）
     if (session.length > 0) {
       const firstPage = session[0].page || session[0].path
-      const entryKey = `${referrerLabel}→${firstPage}`
+      const entryKey = `${sourceLabel}→${firstPage}`
       transitions[entryKey] = (transitions[entryKey] || 0) + 1
     }
     
@@ -212,6 +222,30 @@ function calculateBehaviorFlow(events) {
     referrerStats: referrerStats, // 访问来源统计
     sessions: Object.values(sessions).map(s => s.pages.map(p => p.page || p.path)) // 添加会话数据供前端使用
   }
+}
+
+/**
+ * 统计流量渠道（按会话首个 page_view）
+ * - 前端若已上报 traffic_channel，则直接使用
+ * - 否则：referrer 有值 → Referral；无值 → Direct（粗略兜底）
+ */
+function calculateTrafficChannels(events) {
+  const firstPageViewBySession = {}
+  events.forEach(e => {
+    if (!e.sessionId || e.event !== 'page_view' || !e.timestamp) return
+    const existing = firstPageViewBySession[e.sessionId]
+    if (!existing || new Date(e.timestamp) < new Date(existing.timestamp)) {
+      firstPageViewBySession[e.sessionId] = e
+    }
+  })
+
+  const byChannel = {}
+  Object.values(firstPageViewBySession).forEach(e => {
+    const channel = e.traffic_channel || (e.referrer ? 'Referral' : 'Direct')
+    byChannel[channel] = (byChannel[channel] || 0) + 1
+  })
+
+  return byChannel
 }
 
 /**
@@ -1144,6 +1178,14 @@ app.get('/api/stats', async (req, res) => {
     // 行为流分析（用户浏览路径）
     stats.behaviorFlow = calculateBehaviorFlow(filteredEvents)
 
+    // 访问来源/渠道统计（按会话首访）
+    // - 来源（Source）：来自 behaviorFlow.referrerStats（已优先使用 traffic_source）
+    // - 渠道（Channel）：优先 traffic_channel，否则简单兜底
+    stats.traffic = {
+      bySource: stats.behaviorFlow.referrerStats || {},
+      byChannel: calculateTrafficChannels(filteredEvents)
+    }
+
     // 转化统计
     stats.conversions = calculateConversions(filteredEvents)
 
@@ -1308,154 +1350,16 @@ app.get('/api/health', (req, res) => {
 
 // 提供追踪脚本
 app.get('/tracking.js', (req, res) => {
-  const trackingScript = `
-(function() {
-  'use strict';
-  const API_BASE_URL = 'http://110.40.153.38:5707/api';
-  function getUserId() {
-    let userId = localStorage.getItem('tracking_user_id');
-    if (!userId) {
-      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('tracking_user_id', userId);
-    }
-    return userId;
+  try {
+    const scriptPath = path.join(__dirname, '../public/tracking.js')
+    const trackingScript = fs.readFileSync(scriptPath, 'utf8')
+    res.setHeader('Content-Type', 'application/javascript')
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.send(trackingScript)
+  } catch (error) {
+    console.error('Error serving /tracking.js:', error)
+    res.status(500).send('// Failed to load tracking.js')
   }
-  function getSessionId() {
-    let sessionId = sessionStorage.getItem('tracking_session_id');
-    if (!sessionId) {
-      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      sessionStorage.setItem('tracking_session_id', sessionId);
-    }
-    return sessionId;
-  }
-  function getDeviceInfo() {
-    return {
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      platform: navigator.platform,
-      screenWidth: window.screen.width,
-      screenHeight: window.screen.height,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight
-    };
-  }
-  async function trackEvent(eventType, eventData = {}) {
-    try {
-      const trackingData = {
-        event: eventType,
-        timestamp: new Date().toISOString(),
-        userId: getUserId(),
-        sessionId: getSessionId(),
-        url: window.location.href,
-        path: window.location.pathname,
-        referrer: document.referrer || '',
-        device: getDeviceInfo(),
-        ...eventData
-      };
-      const response = await fetch(API_BASE_URL + '/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(trackingData),
-        keepalive: true
-      });
-      if (!response.ok) throw new Error('HTTP error! status: ' + response.status);
-      const result = await response.json();
-      console.log('[Tracking] Event sent:', eventType, result);
-      return result;
-    } catch (error) {
-      console.error('[Tracking] Error sending event:', eventType, error);
-      return null;
-    }
-  }
-  function trackPageView() {
-    return trackEvent('page_view', {
-      page: window.location.pathname,
-      pageName: document.title
-    });
-  }
-  let scrollTracked = { 25: false, 50: false, 75: false, 100: false };
-  function handleScroll() {
-    const windowHeight = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight;
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    const scrollPercent = Math.round((scrollTop / (documentHeight - windowHeight)) * 100);
-    if (scrollPercent >= 25 && !scrollTracked[25]) {
-      trackEvent('scroll_depth', { scrollPercent: 25, milestone: '25%' });
-      scrollTracked[25] = true;
-    }
-    if (scrollPercent >= 50 && !scrollTracked[50]) {
-      trackEvent('scroll_depth', { scrollPercent: 50, milestone: '50%' });
-      scrollTracked[50] = true;
-    }
-    if (scrollPercent >= 75 && !scrollTracked[75]) {
-      trackEvent('scroll_depth', { scrollPercent: 75, milestone: '75%' });
-      scrollTracked[75] = true;
-    }
-    if (scrollPercent >= 100 && !scrollTracked[100]) {
-      trackEvent('scroll_depth', { scrollPercent: 100, milestone: '100%' });
-      scrollTracked[100] = true;
-    }
-  }
-  let startTime = Date.now();
-  function trackPageTime() {
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    if (duration > 0) {
-      trackEvent('time_on_page', { duration: duration });
-    }
-  }
-  function trackLinkClicks() {
-    document.addEventListener('click', function(e) {
-      const link = e.target.closest('a');
-      if (link && link.href) {
-        trackEvent('link_click', {
-          linkUrl: link.href,
-          linkText: link.textContent || ''
-        });
-      }
-    });
-  }
-  function trackButtonClicks() {
-    document.addEventListener('click', function(e) {
-      if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-        const button = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
-        trackEvent('button_click', {
-          buttonName: button.textContent || button.id || button.className || 'unknown'
-        });
-      }
-    });
-  }
-  function init() {
-    trackPageView();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    document.addEventListener('visibilitychange', function() {
-      if (document.hidden) {
-        trackPageTime();
-      } else {
-        startTime = Date.now();
-      }
-    });
-    window.addEventListener('beforeunload', function() {
-      trackPageTime();
-    });
-    trackLinkClicks();
-    trackButtonClicks();
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-  window.tracking = {
-    track: trackEvent,
-    trackPageView: trackPageView,
-    trackEvent: trackEvent
-  };
-})();
-  `.trim();
-  
-  res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.send(trackingScript);
 })
 
 // 根路径 - 重定向到 API 信息

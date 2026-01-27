@@ -9,6 +9,193 @@
 
   // 配置
   const API_BASE_URL = 'http://110.40.153.38:5707/api';
+
+  // =========================
+  // 流量来源识别（Session Attribution）
+  // =========================
+  const SESSION_ATTR_KEY = 'tracking_session_attribution_v1';
+
+  function safeUrlParse(url) {
+    try {
+      return new URL(url);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getReferrerHost(referrer) {
+    const u = safeUrlParse(referrer);
+    return (u && u.hostname ? u.hostname.toLowerCase() : '') || '';
+  }
+
+  function parseQueryParamsFromCurrentUrl() {
+    const u = safeUrlParse(window.location.href);
+    if (!u) return {};
+
+    const get = (k) => u.searchParams.get(k) || '';
+
+    const utm = {
+      utm_source: get('utm_source'),
+      utm_medium: get('utm_medium'),
+      utm_campaign: get('utm_campaign'),
+      utm_term: get('utm_term'),
+      utm_content: get('utm_content')
+    };
+
+    const clickIds = [
+      ['gclid', 'google'],
+      ['msclkid', 'bing'],
+      ['fbclid', 'meta'],
+      ['ttclid', 'tiktok'],
+      ['twclid', 'twitter'],
+      ['igshid', 'instagram']
+    ];
+
+    let click_id = '';
+    let click_id_type = '';
+    for (const [key, type] of clickIds) {
+      const v = get(key);
+      if (v) {
+        click_id = v;
+        click_id_type = type;
+        break;
+      }
+    }
+
+    return { ...utm, click_id, click_id_type };
+  }
+
+  function channelFromMedium(medium, source) {
+    const m = (medium || '').toLowerCase();
+    const s = (source || '').toLowerCase();
+
+    if (m === '(none)' || m === 'none') return 'Direct';
+    if (m === 'organic') return 'Organic Search';
+    if (m === 'referral') return 'Referral';
+    if (m === 'email' || m === 'edm' || m === 'newsletter') return 'Email';
+    if (m === 'social' || m === 'social-network' || m === 'social_media') return 'Social';
+    if (m === 'affiliate') return 'Affiliate';
+    if (m === 'display' || m === 'banner' || m === 'cpm') return 'Display';
+    if (m === 'cpc' || m === 'ppc' || m === 'paidsearch' || m === 'paid_search') return 'Paid Search';
+    if (m === 'paidsocial' || m === 'paid_social') return 'Paid Social';
+
+    if (s.includes('weixin') || s.includes('wechat')) return 'Social';
+    if (s.includes('weibo') || s.includes('zhihu')) return 'Social';
+    return 'Other';
+  }
+
+  function classifyTraffic({ referrer, currentHost, utm_source, utm_medium, click_id_type }) {
+    const refHost = getReferrerHost(referrer);
+
+    const hasUtm = Boolean(utm_source || utm_medium);
+    if (hasUtm) {
+      const medium = (utm_medium || (click_id_type ? 'cpc' : '') || '(not set)').toLowerCase();
+      const source = (utm_source || '(not set)').toLowerCase();
+      return {
+        traffic_source: utm_source || '(not set)',
+        traffic_medium: utm_medium || (click_id_type ? 'cpc' : '(not set)'),
+        traffic_channel: channelFromMedium(medium, source)
+      };
+    }
+
+    if (refHost) {
+      if (currentHost && refHost === currentHost.toLowerCase()) {
+        return { traffic_source: '直接访问', traffic_medium: '(none)', traffic_channel: 'Direct' };
+      }
+
+      const searchEngines = new Map([
+        ['www.baidu.com', '百度'],
+        ['baidu.com', '百度'],
+        ['m.baidu.com', '百度'],
+        ['www.google.com', 'Google'],
+        ['google.com', 'Google'],
+        ['www.bing.com', 'Bing'],
+        ['bing.com', 'Bing'],
+        ['search.yahoo.com', 'Yahoo']
+      ]);
+      if (searchEngines.has(refHost)) {
+        return { traffic_source: searchEngines.get(refHost), traffic_medium: 'organic', traffic_channel: 'Organic Search' };
+      }
+
+      const socialHosts = new Map([
+        ['mp.weixin.qq.com', '微信'],
+        ['weixin.qq.com', '微信'],
+        ['weibo.com', '微博'],
+        ['www.weibo.com', '微博'],
+        ['m.weibo.cn', '微博'],
+        ['zhihu.com', '知乎'],
+        ['www.zhihu.com', '知乎'],
+        ['twitter.com', 'Twitter'],
+        ['www.twitter.com', 'Twitter'],
+        ['x.com', 'Twitter'],
+        ['www.x.com', 'Twitter'],
+        ['facebook.com', 'Facebook'],
+        ['www.facebook.com', 'Facebook'],
+        ['linkedin.com', 'LinkedIn'],
+        ['www.linkedin.com', 'LinkedIn'],
+        ['reddit.com', 'Reddit'],
+        ['www.reddit.com', 'Reddit'],
+        ['im.dingtalk.com', '钉钉'],
+        ['oa.dingtalk.com', '钉钉'],
+        ['dingtalk.com', '钉钉'],
+        ['www.dingtalk.com', '钉钉']
+      ]);
+      if (socialHosts.has(refHost)) {
+        return { traffic_source: socialHosts.get(refHost), traffic_medium: 'social', traffic_channel: 'Social' };
+      }
+
+      const domainParts = refHost.split('.');
+      const mainDomain = domainParts.length >= 2 ? domainParts.slice(-2).join('.') : refHost;
+      return { traffic_source: mainDomain.replace(/^www\./, ''), traffic_medium: 'referral', traffic_channel: 'Referral' };
+    }
+
+    return { traffic_source: '直接访问', traffic_medium: '(none)', traffic_channel: 'Direct' };
+  }
+
+  function getSessionAttribution() {
+    try {
+      const existingRaw = sessionStorage.getItem(SESSION_ATTR_KEY);
+      if (existingRaw) {
+        const parsed = JSON.parse(existingRaw);
+        if (parsed && typeof parsed === 'object') {
+          const cur = parseQueryParamsFromCurrentUrl();
+          const hasCampaignNow = Boolean(cur.utm_source || cur.utm_medium || cur.click_id);
+          if (hasCampaignNow && parsed.traffic_channel === 'Direct') {
+            const currentHost = window.location.hostname || '';
+            const referrer = parsed.entryReferrer || document.referrer || '';
+            const traffic = classifyTraffic({ referrer, currentHost, ...cur });
+            const updated = { ...parsed, ...cur, ...traffic };
+            sessionStorage.setItem(SESSION_ATTR_KEY, JSON.stringify(updated));
+            return updated;
+          }
+          return parsed;
+        }
+      }
+
+      const entryUrl = window.location.href;
+      const entryPath = window.location.pathname;
+      const entryReferrer = document.referrer || '';
+      const entryReferrerHost = getReferrerHost(entryReferrer);
+      const currentHost = window.location.hostname || '';
+      const params = parseQueryParamsFromCurrentUrl();
+      const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params });
+
+      const attribution = {
+        entryUrl,
+        entryPath,
+        entryReferrer,
+        entryReferrerHost,
+        ...params,
+        ...traffic,
+        attributionVersion: 'v1'
+      };
+
+      sessionStorage.setItem(SESSION_ATTR_KEY, JSON.stringify(attribution));
+      return attribution;
+    } catch (e) {
+      return {};
+    }
+  }
   
   // 获取用户唯一标识（从localStorage或生成新ID）
   function getUserId() {
@@ -46,6 +233,7 @@
   // 发送埋点数据到后端服务器
   async function trackEvent(eventType, eventData = {}) {
     try {
+      const attribution = getSessionAttribution();
       const trackingData = {
         event: eventType,
         timestamp: new Date().toISOString(),
@@ -55,6 +243,8 @@
         path: window.location.pathname,
         referrer: document.referrer || '',
         device: getDeviceInfo(),
+        // 会话来源（用于行为流/来源分析）
+        ...attribution,
         ...eventData
       };
 

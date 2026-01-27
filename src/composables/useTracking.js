@@ -23,6 +23,216 @@ const getApiBaseUrl = () => {
 }
 
 /**
+ * =========================
+ * 流量来源识别（Session Attribution）
+ * =========================
+ * 目标：
+ * - 识别访问来源（direct / organic / social / referral / paid / email 等）
+ * - 解析 UTM（utm_source/utm_medium/utm_campaign/utm_term/utm_content）
+ * - 解析常见点击ID（gclid/fbclid/msclkid/ttclid 等）
+ * - 将“会话首访来源”持久化到 sessionStorage，确保 SPA 跳转不会丢来源
+ */
+
+const SESSION_ATTR_KEY = 'tracking_session_attribution_v1'
+
+function safeUrlParse(url) {
+  try {
+    return new URL(url)
+  } catch {
+    return null
+  }
+}
+
+function getReferrerHost(referrer) {
+  const u = safeUrlParse(referrer)
+  return u?.hostname?.toLowerCase() || ''
+}
+
+function parseQueryParamsFromCurrentUrl() {
+  if (typeof window === 'undefined') return {}
+  const u = safeUrlParse(window.location.href)
+  if (!u) return {}
+
+  const get = (k) => u.searchParams.get(k) || ''
+
+  const utm = {
+    utm_source: get('utm_source'),
+    utm_medium: get('utm_medium'),
+    utm_campaign: get('utm_campaign'),
+    utm_term: get('utm_term'),
+    utm_content: get('utm_content')
+  }
+
+  // 常见点击ID（不同平台/广告系统）
+  const clickIds = [
+    ['gclid', 'google'],
+    ['msclkid', 'bing'],
+    ['fbclid', 'meta'],
+    ['ttclid', 'tiktok'],
+    ['twclid', 'twitter'],
+    ['igshid', 'instagram']
+  ]
+
+  let click_id = ''
+  let click_id_type = ''
+  for (const [key, type] of clickIds) {
+    const v = get(key)
+    if (v) {
+      click_id = v
+      click_id_type = type
+      break
+    }
+  }
+
+  return { ...utm, click_id, click_id_type }
+}
+
+function classifyTraffic({ referrer, currentHost, utm_source, utm_medium, click_id_type }) {
+  const refHost = getReferrerHost(referrer)
+
+  // 1) UTM 优先（显式归因）
+  const hasUtm = Boolean(utm_source || utm_medium)
+  if (hasUtm) {
+    const medium = (utm_medium || (click_id_type ? 'cpc' : '') || '(not set)').toLowerCase()
+    const source = (utm_source || '(not set)').toLowerCase()
+    return {
+      traffic_source: utm_source || '(not set)',
+      traffic_medium: utm_medium || (click_id_type ? 'cpc' : '(not set)'),
+      traffic_channel: channelFromMedium(medium, source)
+    }
+  }
+
+  // 2) Referrer（自然/社媒/引荐）
+  if (refHost) {
+    // 内部跳转（SPA/同域）不算来源
+    if (currentHost && refHost === currentHost.toLowerCase()) {
+      return { traffic_source: '直接访问', traffic_medium: '(none)', traffic_channel: 'Direct' }
+    }
+
+    // 搜索引擎（Organic Search）
+    const searchEngines = new Map([
+      ['www.baidu.com', '百度'],
+      ['baidu.com', '百度'],
+      ['m.baidu.com', '百度'],
+      ['www.google.com', 'Google'],
+      ['google.com', 'Google'],
+      ['www.bing.com', 'Bing'],
+      ['bing.com', 'Bing'],
+      ['search.yahoo.com', 'Yahoo']
+    ])
+    if (searchEngines.has(refHost)) {
+      return { traffic_source: searchEngines.get(refHost), traffic_medium: 'organic', traffic_channel: 'Organic Search' }
+    }
+
+    // 社交平台（Social）
+    const socialHosts = new Map([
+      ['mp.weixin.qq.com', '微信'],
+      ['weixin.qq.com', '微信'],
+      ['weibo.com', '微博'],
+      ['www.weibo.com', '微博'],
+      ['m.weibo.cn', '微博'],
+      ['zhihu.com', '知乎'],
+      ['www.zhihu.com', '知乎'],
+      ['twitter.com', 'Twitter'],
+      ['www.twitter.com', 'Twitter'],
+      ['x.com', 'Twitter'],
+      ['www.x.com', 'Twitter'],
+      ['facebook.com', 'Facebook'],
+      ['www.facebook.com', 'Facebook'],
+      ['linkedin.com', 'LinkedIn'],
+      ['www.linkedin.com', 'LinkedIn'],
+      ['reddit.com', 'Reddit'],
+      ['www.reddit.com', 'Reddit'],
+      ['im.dingtalk.com', '钉钉'],
+      ['oa.dingtalk.com', '钉钉'],
+      ['dingtalk.com', '钉钉'],
+      ['www.dingtalk.com', '钉钉']
+    ])
+    if (socialHosts.has(refHost)) {
+      return { traffic_source: socialHosts.get(refHost), traffic_medium: 'social', traffic_channel: 'Social' }
+    }
+
+    // 默认：引荐（Referral）
+    const domainParts = refHost.split('.')
+    const mainDomain = domainParts.length >= 2 ? domainParts.slice(-2).join('.') : refHost
+    return { traffic_source: mainDomain.replace(/^www\./, ''), traffic_medium: 'referral', traffic_channel: 'Referral' }
+  }
+
+  // 3) 直接访问
+  return { traffic_source: '直接访问', traffic_medium: '(none)', traffic_channel: 'Direct' }
+}
+
+function channelFromMedium(medium, source) {
+  const m = (medium || '').toLowerCase()
+  const s = (source || '').toLowerCase()
+
+  if (m === '(none)' || m === 'none') return 'Direct'
+  if (m === 'organic') return 'Organic Search'
+  if (m === 'referral') return 'Referral'
+  if (m === 'email' || m === 'edm' || m === 'newsletter') return 'Email'
+  if (m === 'social' || m === 'social-network' || m === 'social_media') return 'Social'
+  if (m === 'affiliate') return 'Affiliate'
+  if (m === 'display' || m === 'banner' || m === 'cpm') return 'Display'
+  if (m === 'cpc' || m === 'ppc' || m === 'paidsearch' || m === 'paid_search') return 'Paid Search'
+  if (m === 'paidsocial' || m === 'paid_social') return 'Paid Social'
+
+  // 一些常见 source 兜底
+  if (s.includes('weixin') || s.includes('wechat')) return 'Social'
+  if (s.includes('weibo') || s.includes('zhihu')) return 'Social'
+
+  return 'Other'
+}
+
+function getSessionAttribution() {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const existingRaw = sessionStorage.getItem(SESSION_ATTR_KEY)
+    if (existingRaw) {
+      const parsed = JSON.parse(existingRaw)
+      if (parsed && typeof parsed === 'object') {
+        // 如果首访是 Direct，但当前 URL 带了 UTM / click id，则用“非直达覆盖直达”
+        const cur = parseQueryParamsFromCurrentUrl()
+        const hasCampaignNow = Boolean(cur.utm_source || cur.utm_medium || cur.click_id)
+        if (hasCampaignNow && parsed.traffic_channel === 'Direct') {
+          const currentHost = window.location.hostname || ''
+          const referrer = parsed.entryReferrer || document.referrer || ''
+          const traffic = classifyTraffic({ referrer, currentHost, ...cur })
+          const updated = { ...parsed, ...cur, ...traffic }
+          sessionStorage.setItem(SESSION_ATTR_KEY, JSON.stringify(updated))
+          return updated
+        }
+        return parsed
+      }
+    }
+
+    // 初始化（会话首访）
+    const entryUrl = window.location.href
+    const entryPath = window.location.pathname
+    const entryReferrer = document.referrer || ''
+    const entryReferrerHost = getReferrerHost(entryReferrer)
+    const currentHost = window.location.hostname || ''
+    const params = parseQueryParamsFromCurrentUrl()
+    const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params })
+
+    const attribution = {
+      entryUrl,
+      entryPath,
+      entryReferrer,
+      entryReferrerHost,
+      ...params,
+      ...traffic,
+      attributionVersion: 'v1'
+    }
+
+    sessionStorage.setItem(SESSION_ATTR_KEY, JSON.stringify(attribution))
+    return attribution
+  } catch {
+    return {}
+  }
+}
+
+/**
  * 获取用户唯一标识（从localStorage或生成新ID）
  */
 function getUserId() {
@@ -75,6 +285,7 @@ function getDeviceInfo() {
  */
 async function trackEvent(eventType, eventData = {}) {
   try {
+    const attribution = getSessionAttribution()
     // 构建完整的事件数据
     const trackingData = {
       event: eventType,
@@ -85,6 +296,8 @@ async function trackEvent(eventType, eventData = {}) {
       path: window.location.pathname,
       referrer: document.referrer || '',
       device: getDeviceInfo(),
+      // 会话来源（用于行为流/来源分析）
+      ...attribution,
       ...eventData // 允许传入额外的自定义数据
     }
 
