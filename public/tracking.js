@@ -86,15 +86,19 @@
 
   function detectInAppSource(userAgent) {
     const ua = (userAgent || '').toLowerCase();
-    if (ua.includes('micromessenger')) return '微信';
-    if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return '钉钉';
+    if (ua.includes('micromessenger')) {
+      if (ua.includes('macwechat')) return 'MacWechat';
+      if (ua.includes('windowswechat')) return 'WindowsWechat';
+      return 'WeChat';
+    }
+    if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return 'DingTalk';
     if (ua.includes(' qq/') || ua.includes('mqqbrowser') || ua.includes('qqbrowser')) return 'QQ';
-    if (ua.includes('weibo')) return '微博';
-    if (ua.includes('zhihu')) return '知乎';
-    if (ua.includes('aweme') || ua.includes('douyin')) return '抖音';
-    if (ua.includes('toutiao')) return '今日头条';
-    if (ua.includes('xhs') || ua.includes('xiaohongshu')) return '小红书';
-    if (ua.includes('lark') || ua.includes('feishu')) return '飞书';
+    if (ua.includes('weibo')) return 'Weibo';
+    if (ua.includes('zhihu')) return 'Zhihu';
+    if (ua.includes('aweme') || ua.includes('douyin')) return 'Douyin';
+    if (ua.includes('toutiao')) return 'Toutiao';
+    if (ua.includes('xhs') || ua.includes('xiaohongshu')) return 'Xiaohongshu';
+    if (ua.includes('lark') || ua.includes('feishu')) return 'Feishu';
     if (ua.includes('telegram')) return 'Telegram';
     if (ua.includes('whatsapp')) return 'WhatsApp';
     return '';
@@ -194,6 +198,7 @@
       const entryReferrerHost = getReferrerHost(entryReferrer);
       const currentHost = window.location.hostname || '';
       const entryUserAgent = navigator.userAgent || '';
+      const clientApp = detectInAppSource(entryUserAgent);
       const params = parseQueryParamsFromCurrentUrl();
       const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params });
 
@@ -203,9 +208,8 @@
         !(params.utm_source || params.utm_medium || params.click_id) &&
         traffic.traffic_channel === 'Direct'
       ) {
-        const inApp = detectInAppSource(entryUserAgent);
-        if (inApp) {
-          traffic.traffic_source = inApp;
+        if (clientApp) {
+          traffic.traffic_source = clientApp;
           traffic.traffic_medium = 'social';
           traffic.traffic_channel = 'Social';
         }
@@ -217,6 +221,7 @@
         entryReferrer,
         entryReferrerHost,
         entryUserAgent,
+        client_app: clientApp,
         ...params,
         ...traffic,
         attributionVersion: 'v1'

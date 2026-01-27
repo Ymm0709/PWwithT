@@ -186,22 +186,27 @@ function channelFromMedium(medium, source) {
 function detectInAppSource(userAgent = '') {
   const ua = (userAgent || '').toLowerCase()
   // 微信内置浏览器
-  if (ua.includes('micromessenger')) return '微信'
+  if (ua.includes('micromessenger')) {
+    // 有些 UA 会带更具体的标识（例如 macwechat / windowswechat）
+    if (ua.includes('macwechat')) return 'MacWechat'
+    if (ua.includes('windowswechat')) return 'WindowsWechat'
+    return 'WeChat'
+  }
   // 钉钉内置浏览器（常见 UA: AliApp(DingTalk/..), DingTalk/..）
-  if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return '钉钉'
+  if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return 'DingTalk'
   // QQ / QQ浏览器内置（QQ内置常见标识：qq/、mqqbrowser、qqbrowser）
   if (ua.includes(' qq/') || ua.includes('mqqbrowser') || ua.includes('qqbrowser')) return 'QQ'
   // 微博
-  if (ua.includes('weibo')) return '微博'
+  if (ua.includes('weibo')) return 'Weibo'
   // 知乎（ZhihuHybrid）
-  if (ua.includes('zhihu')) return '知乎'
+  if (ua.includes('zhihu')) return 'Zhihu'
   // 抖音 / 今日头条系（常见：aweme、toutiao）
-  if (ua.includes('aweme') || ua.includes('douyin')) return '抖音'
-  if (ua.includes('toutiao')) return '今日头条'
+  if (ua.includes('aweme') || ua.includes('douyin')) return 'Douyin'
+  if (ua.includes('toutiao')) return 'Toutiao'
   // 小红书（常见：xhs）
-  if (ua.includes('xhs') || ua.includes('xiaohongshu')) return '小红书'
+  if (ua.includes('xhs') || ua.includes('xiaohongshu')) return 'Xiaohongshu'
   // 飞书/Lark
-  if (ua.includes('lark') || ua.includes('feishu')) return '飞书'
+  if (ua.includes('lark') || ua.includes('feishu')) return 'Feishu'
   // Telegram / WhatsApp（有些会带 app token）
   if (ua.includes('telegram')) return 'Telegram'
   if (ua.includes('whatsapp')) return 'WhatsApp'
@@ -238,6 +243,7 @@ function getSessionAttribution() {
     const entryReferrerHost = getReferrerHost(entryReferrer)
     const currentHost = window.location.hostname || ''
     const entryUserAgent = navigator.userAgent || ''
+    const clientApp = detectInAppSource(entryUserAgent) // e.g. MacWechat / WeChat / DingTalk / ...
     const params = parseQueryParamsFromCurrentUrl()
     const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params })
 
@@ -248,9 +254,8 @@ function getSessionAttribution() {
       !(params.utm_source || params.utm_medium || params.click_id) &&
       traffic.traffic_channel === 'Direct'
     ) {
-      const inApp = detectInAppSource(entryUserAgent)
-      if (inApp) {
-        traffic.traffic_source = inApp
+      if (clientApp) {
+        traffic.traffic_source = clientApp
         traffic.traffic_medium = 'social'
         traffic.traffic_channel = 'Social'
       }
@@ -262,6 +267,7 @@ function getSessionAttribution() {
       entryReferrer,
       entryReferrerHost,
       entryUserAgent,
+      client_app: clientApp,
       ...params,
       ...traffic,
       attributionVersion: 'v1'
