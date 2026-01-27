@@ -1149,11 +1149,17 @@ function App() {
       const [from, to] = key.split('→')
       // 判断是否是访问来源（不再包含"内部:"）
       const isReferrer = from === '直接访问' || 
-                        from === '微信' || from === '百度' || from === 'Google' || 
-                        from === 'Bing' || from === '微博' || from === '知乎' || 
+                        // 兼容来源标签：中文/英文/UA 识别
+                        from === '微信' || from === 'WeChat' || from === 'MacWechat' || from === 'WindowsWechat' ||
+                        from === '钉钉' || from === 'DingTalk' ||
+                        from === '百度' || from === 'Baidu' ||
+                        from === 'Google' || from === 'Google Search' ||
+                        from === 'Bing' || from === 'Bing Search' ||
+                        from === '微博' || from === 'Weibo' ||
+                        from === '知乎' || from === 'Zhihu' ||
                         from === 'GitHub' || from === 'Twitter' || from === 'Facebook' ||
                         from === 'LinkedIn' || from === 'YouTube' || from === 'Reddit' ||
-                        from === '钉钉' ||
+                        // 任何域名形式（referral）
                         (!from.startsWith('/') && !from.includes('://') && from.includes('.'))
       if (isReferrer) {
         referrerSet.add(from)
@@ -1212,11 +1218,17 @@ function App() {
     const otherPages = Array.from(pageSet).filter(p => {
       if (mainPages.has(p)) return false
       const isReferrer = p === '直接访问' || 
-                        p === '微信' || p === '百度' || p === 'Google' || 
-                        p === 'Bing' || p === '微博' || p === '知乎' || 
+                        // 兼容来源标签：中文/英文/UA 识别
+                        p === '微信' || p === 'WeChat' || p === 'MacWechat' || p === 'WindowsWechat' ||
+                        p === '钉钉' || p === 'DingTalk' ||
+                        p === '百度' || p === 'Baidu' ||
+                        p === 'Google' || p === 'Google Search' ||
+                        p === 'Bing' || p === 'Bing Search' ||
+                        p === '微博' || p === 'Weibo' ||
+                        p === '知乎' || p === 'Zhihu' ||
                         p === 'GitHub' || p === 'Twitter' || p === 'Facebook' ||
                         p === 'LinkedIn' || p === 'YouTube' || p === 'Reddit' ||
-                        p === '钉钉' ||
+                        // 任何域名形式（referral）
                         (!p.startsWith('/') && !p.includes('://') && p.includes('.'))
       return !isReferrer
     })
@@ -1234,11 +1246,17 @@ function App() {
       // 处理访问来源节点（不再包含"内部:"）
       let fromNode, toNode
       const isReferrer = from === '直接访问' || 
-                        from === '微信' || from === '百度' || from === 'Google' || 
-                        from === 'Bing' || from === '微博' || from === '知乎' || 
+                        // 兼容来源标签：中文/英文/UA 识别
+                        from === '微信' || from === 'WeChat' || from === 'MacWechat' || from === 'WindowsWechat' ||
+                        from === '钉钉' || from === 'DingTalk' ||
+                        from === '百度' || from === 'Baidu' ||
+                        from === 'Google' || from === 'Google Search' ||
+                        from === 'Bing' || from === 'Bing Search' ||
+                        from === '微博' || from === 'Weibo' ||
+                        from === '知乎' || from === 'Zhihu' ||
                         from === 'GitHub' || from === 'Twitter' || from === 'Facebook' ||
                         from === 'LinkedIn' || from === 'YouTube' || from === 'Reddit' ||
-                        from === '钉钉' ||
+                        // 任何域名形式（referral）
                         (!from.startsWith('/') && !from.includes('://') && from.includes('.'))
       
       if (isReferrer) {

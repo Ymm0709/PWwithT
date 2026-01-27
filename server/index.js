@@ -232,6 +232,12 @@ function calculateBehaviorFlow(events) {
     const referrer = sessionData.referrer || ''
     const trafficSource = sessionData.trafficSource || ''
     let sourceLabel = trafficSource || '直接访问'
+
+    // 归因结果清理：
+    // - Internal 表示同域站内跳转，不应作为“外部来源”节点展示
+    // - Direct Entry 与 “直接访问”语义一致，统一为“直接访问”
+    if (sourceLabel === 'Internal') sourceLabel = '直接访问'
+    if (sourceLabel === 'Direct Entry') sourceLabel = '直接访问'
     
     if (!trafficSource && referrer) {
       try {
@@ -306,6 +312,10 @@ function calculateBehaviorFlow(events) {
         sourceLabel = '外部来源'
       }
     }
+
+    // 再做一次兜底清理（防止上面分支写回 Internal/Direct Entry）
+    if (sourceLabel === 'Internal') sourceLabel = '直接访问'
+    if (sourceLabel === 'Direct Entry') sourceLabel = '直接访问'
     referrerStats[sourceLabel] = (referrerStats[sourceLabel] || 0) + 1
     
     // 生成路径字符串（包含访问来源）
