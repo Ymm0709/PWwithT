@@ -183,6 +183,31 @@ function channelFromMedium(medium, source) {
   return 'Other'
 }
 
+function detectInAppSource(userAgent = '') {
+  const ua = (userAgent || '').toLowerCase()
+  // 微信内置浏览器
+  if (ua.includes('micromessenger')) return '微信'
+  // 钉钉内置浏览器（常见 UA: AliApp(DingTalk/..), DingTalk/..）
+  if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return '钉钉'
+  // QQ / QQ浏览器内置（QQ内置常见标识：qq/、mqqbrowser、qqbrowser）
+  if (ua.includes(' qq/') || ua.includes('mqqbrowser') || ua.includes('qqbrowser')) return 'QQ'
+  // 微博
+  if (ua.includes('weibo')) return '微博'
+  // 知乎（ZhihuHybrid）
+  if (ua.includes('zhihu')) return '知乎'
+  // 抖音 / 今日头条系（常见：aweme、toutiao）
+  if (ua.includes('aweme') || ua.includes('douyin')) return '抖音'
+  if (ua.includes('toutiao')) return '今日头条'
+  // 小红书（常见：xhs）
+  if (ua.includes('xhs') || ua.includes('xiaohongshu')) return '小红书'
+  // 飞书/Lark
+  if (ua.includes('lark') || ua.includes('feishu')) return '飞书'
+  // Telegram / WhatsApp（有些会带 app token）
+  if (ua.includes('telegram')) return 'Telegram'
+  if (ua.includes('whatsapp')) return 'WhatsApp'
+  return ''
+}
+
 function getSessionAttribution() {
   if (typeof window === 'undefined') return {}
 
@@ -212,14 +237,31 @@ function getSessionAttribution() {
     const entryReferrer = document.referrer || ''
     const entryReferrerHost = getReferrerHost(entryReferrer)
     const currentHost = window.location.hostname || ''
+    const entryUserAgent = navigator.userAgent || ''
     const params = parseQueryParamsFromCurrentUrl()
     const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params })
+
+    // 兜底：referrer 为空且无 UTM 时，尝试用 UA 识别 App 内置浏览器来源（微信/钉钉）
+    // 这能覆盖“从微信/钉钉直接打开链接，referrer 被剥离”的常见场景
+    if (
+      (!entryReferrer || entryReferrer === '') &&
+      !(params.utm_source || params.utm_medium || params.click_id) &&
+      traffic.traffic_channel === 'Direct'
+    ) {
+      const inApp = detectInAppSource(entryUserAgent)
+      if (inApp) {
+        traffic.traffic_source = inApp
+        traffic.traffic_medium = 'social'
+        traffic.traffic_channel = 'Social'
+      }
+    }
 
     const attribution = {
       entryUrl,
       entryPath,
       entryReferrer,
       entryReferrerHost,
+      entryUserAgent,
       ...params,
       ...traffic,
       attributionVersion: 'v1'

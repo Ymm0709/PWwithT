@@ -84,6 +84,22 @@
     return 'Other';
   }
 
+  function detectInAppSource(userAgent) {
+    const ua = (userAgent || '').toLowerCase();
+    if (ua.includes('micromessenger')) return '微信';
+    if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return '钉钉';
+    if (ua.includes(' qq/') || ua.includes('mqqbrowser') || ua.includes('qqbrowser')) return 'QQ';
+    if (ua.includes('weibo')) return '微博';
+    if (ua.includes('zhihu')) return '知乎';
+    if (ua.includes('aweme') || ua.includes('douyin')) return '抖音';
+    if (ua.includes('toutiao')) return '今日头条';
+    if (ua.includes('xhs') || ua.includes('xiaohongshu')) return '小红书';
+    if (ua.includes('lark') || ua.includes('feishu')) return '飞书';
+    if (ua.includes('telegram')) return 'Telegram';
+    if (ua.includes('whatsapp')) return 'WhatsApp';
+    return '';
+  }
+
   function classifyTraffic({ referrer, currentHost, utm_source, utm_medium, click_id_type }) {
     const refHost = getReferrerHost(referrer);
 
@@ -177,14 +193,30 @@
       const entryReferrer = document.referrer || '';
       const entryReferrerHost = getReferrerHost(entryReferrer);
       const currentHost = window.location.hostname || '';
+      const entryUserAgent = navigator.userAgent || '';
       const params = parseQueryParamsFromCurrentUrl();
       const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params });
+
+      // 兜底：referrer 为空且无 UTM 时，用 UA 识别微信/钉钉内置浏览器来源
+      if (
+        (!entryReferrer || entryReferrer === '') &&
+        !(params.utm_source || params.utm_medium || params.click_id) &&
+        traffic.traffic_channel === 'Direct'
+      ) {
+        const inApp = detectInAppSource(entryUserAgent);
+        if (inApp) {
+          traffic.traffic_source = inApp;
+          traffic.traffic_medium = 'social';
+          traffic.traffic_channel = 'Social';
+        }
+      }
 
       const attribution = {
         entryUrl,
         entryPath,
         entryReferrer,
         entryReferrerHost,
+        entryUserAgent,
         ...params,
         ...traffic,
         attributionVersion: 'v1'
