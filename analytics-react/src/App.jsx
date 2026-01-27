@@ -1144,24 +1144,29 @@ function App() {
     const transitions = stats.behaviorFlow.transitions
     const pageSet = new Set()
     const referrerSet = new Set() // 访问来源集合
+
+    // 统一判断“来源节点”（否则会出现：来源被当作页面 → 产生同名节点 → 桑基图不显示）
+    const isSourceNode = (value) => {
+      if (!value) return false
+      return value === '直接访问' ||
+        // 兼容来源标签：中文/英文/UA 识别
+        value === '微信' || value === 'WeChat' || value === 'MacWechat' || value === 'WindowsWechat' ||
+        value === '钉钉' || value === 'DingTalk' ||
+        value === '百度' || value === 'Baidu' ||
+        value === 'Google' || value === 'Google Search' ||
+        value === 'Bing' || value === 'Bing Search' ||
+        value === '微博' || value === 'Weibo' ||
+        value === '知乎' || value === 'Zhihu' ||
+        value === 'GitHub' || value === 'Twitter' || value === 'Facebook' ||
+        value === 'LinkedIn' || value === 'YouTube' || value === 'Reddit' ||
+        // 任何域名形式（referral）
+        (!value.startsWith('/') && !value.includes('://') && value.includes('.'))
+    }
     
     Object.keys(transitions).forEach(key => {
       const [from, to] = key.split('→')
       // 判断是否是访问来源（不再包含"内部:"）
-      const isReferrer = from === '直接访问' || 
-                        // 兼容来源标签：中文/英文/UA 识别
-                        from === '微信' || from === 'WeChat' || from === 'MacWechat' || from === 'WindowsWechat' ||
-                        from === '钉钉' || from === 'DingTalk' ||
-                        from === '百度' || from === 'Baidu' ||
-                        from === 'Google' || from === 'Google Search' ||
-                        from === 'Bing' || from === 'Bing Search' ||
-                        from === '微博' || from === 'Weibo' ||
-                        from === '知乎' || from === 'Zhihu' ||
-                        from === 'GitHub' || from === 'Twitter' || from === 'Facebook' ||
-                        from === 'LinkedIn' || from === 'YouTube' || from === 'Reddit' ||
-                        // 任何域名形式（referral）
-                        (!from.startsWith('/') && !from.includes('://') && from.includes('.'))
-      if (isReferrer) {
+      if (isSourceNode(from)) {
         referrerSet.add(from)
       } else {
         pageSet.add(from)
@@ -1174,14 +1179,7 @@ function App() {
     Object.entries(transitions).forEach(([key, value]) => {
       const [from, to] = key.split('→')
       // 只统计页面，不统计访问来源（不再包含"内部:"）
-      const isReferrer = from === '直接访问' || 
-                        from === '微信' || from === '百度' || from === 'Google' || 
-                        from === 'Bing' || from === '微博' || from === '知乎' || 
-                        from === 'GitHub' || from === 'Twitter' || from === 'Facebook' ||
-                        from === 'LinkedIn' || from === 'YouTube' || from === 'Reddit' ||
-                        from === '钉钉' ||
-                        (!from.startsWith('/') && !from.includes('://') && from.includes('.'))
-      if (!isReferrer) {
+      if (!isSourceNode(from)) {
         pageCounts[from] = (pageCounts[from] || 0) + value
       }
       pageCounts[to] = (pageCounts[to] || 0) + value
@@ -1217,20 +1215,7 @@ function App() {
     
     const otherPages = Array.from(pageSet).filter(p => {
       if (mainPages.has(p)) return false
-      const isReferrer = p === '直接访问' || 
-                        // 兼容来源标签：中文/英文/UA 识别
-                        p === '微信' || p === 'WeChat' || p === 'MacWechat' || p === 'WindowsWechat' ||
-                        p === '钉钉' || p === 'DingTalk' ||
-                        p === '百度' || p === 'Baidu' ||
-                        p === 'Google' || p === 'Google Search' ||
-                        p === 'Bing' || p === 'Bing Search' ||
-                        p === '微博' || p === 'Weibo' ||
-                        p === '知乎' || p === 'Zhihu' ||
-                        p === 'GitHub' || p === 'Twitter' || p === 'Facebook' ||
-                        p === 'LinkedIn' || p === 'YouTube' || p === 'Reddit' ||
-                        // 任何域名形式（referral）
-                        (!p.startsWith('/') && !p.includes('://') && p.includes('.'))
-      return !isReferrer
+      return !isSourceNode(p)
     })
     if (otherPages.length > 0) {
       nodes.push({ name: t('other'), originalPath: '__other__', isReferrer: false })
