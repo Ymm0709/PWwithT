@@ -63,6 +63,113 @@ async function writeEvent(event) {
 }
 
 /**
+ * =========================
+ * Source Attribution (Server-side, priority-based)
+ * =========================
+ * 复刻 web_data_analytic 的归因逻辑，把归因放在后端，保证即使前端没带字段也能识别：
+ * Priority 1: UTM Parameters (utm_source in URL)
+ * Priority 2: User-Agent detection (WeChat / DingTalk / ...)
+ * Priority 3: document.referrer analysis (Google/Bing/Direct/Referral...)
+ */
+function detectClientAppFromUserAgent(userAgent = '') {
+  const ua = (userAgent || '').toLowerCase()
+  if (ua.includes('micromessenger')) {
+    if (ua.includes('macwechat')) return 'MacWechat'
+    if (ua.includes('windowswechat')) return 'WindowsWechat'
+    return 'WeChat'
+  }
+  if (ua.includes('dingtalk') || ua.includes('aliapp(dingtalk')) return 'DingTalk'
+  if (ua.includes(' qq/') || ua.includes('qq/') || ua.includes('mqqbrowser') || ua.includes('qqbrowser')) return 'QQ'
+  if (ua.includes('weibo')) return 'Weibo'
+  if (ua.includes('zhihu')) return 'Zhihu'
+  if (ua.includes('aweme') || ua.includes('douyin')) return 'Douyin'
+  if (ua.includes('toutiao')) return 'Toutiao'
+  if (ua.includes('xhs') || ua.includes('xiaohongshu')) return 'Xiaohongshu'
+  if (ua.includes('lark') || ua.includes('feishu')) return 'Feishu'
+  return ''
+}
+
+function normalizeSourceAttribution({ currentUrl = '', referrer = '', userAgent = '' }) {
+  // Priority 1: UTM
+  try {
+    const u = new URL(currentUrl)
+    const utmSource = u.searchParams.get('utm_source') || ''
+    const utmMedium = u.searchParams.get('utm_medium') || ''
+    const utmCampaign = u.searchParams.get('utm_campaign') || ''
+
+    if (utmSource) {
+      // 仓库里对部分 utm_source 有固定映射；这里保留原值，并给出常用友好名
+      const s = utmSource.toLowerCase()
+      const mapped =
+        s === 'wechat' ? 'WeChat' :
+        s === 'dingtalk' ? 'DingTalk' :
+        s === 'google' ? 'Google Search' :
+        s === 'bing' ? 'Bing Search' :
+        s === 'baidu' ? 'Baidu' :
+        utmSource
+
+      return {
+        source: mapped,
+        medium: utmMedium || '(not set)',
+        campaign: utmCampaign || '',
+        channel: utmMedium ? (utmMedium.toLowerCase().includes('social') ? 'Social' : 'UTM') : 'UTM',
+        method: 'utm'
+      }
+    }
+  } catch {
+    // ignore url parse errors
+  }
+
+  // Priority 2: User-Agent
+  const clientApp = detectClientAppFromUserAgent(userAgent)
+  if (clientApp) {
+    return {
+      source: clientApp,
+      medium: 'social',
+      campaign: '',
+      channel: 'Social',
+      method: 'user_agent'
+    }
+  }
+
+  // Priority 3: Referrer
+  if (!referrer) {
+    return {
+      source: 'Direct Entry',
+      medium: '(none)',
+      campaign: '',
+      channel: 'Direct',
+      method: 'none'
+    }
+  }
+
+  try {
+    const ref = new URL(referrer)
+    const cur = (() => { try { return new URL(currentUrl) } catch { return null } })()
+
+    // same domain = internal navigation
+    if (cur && ref.hostname && cur.hostname && ref.hostname === cur.hostname) {
+      return { source: 'Internal', medium: '(none)', campaign: '', channel: 'Direct', method: 'referrer' }
+    }
+
+    const host = (ref.hostname || '').toLowerCase()
+    if (host.includes('google')) return { source: 'Google Search', medium: 'organic', campaign: '', channel: 'Organic Search', method: 'referrer' }
+    if (host.includes('bing')) return { source: 'Bing Search', medium: 'organic', campaign: '', channel: 'Organic Search', method: 'referrer' }
+    if (host.includes('baidu')) return { source: 'Baidu', medium: 'organic', campaign: '', channel: 'Organic Search', method: 'referrer' }
+    if (host.includes('twitter') || host.includes('t.co') || host.includes('x.com')) return { source: 'Twitter', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+    if (host.includes('facebook')) return { source: 'Facebook', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+    if (host.includes('weibo')) return { source: 'Weibo', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+    if (host.includes('zhihu')) return { source: 'Zhihu', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+    if (host.includes('dingtalk')) return { source: 'DingTalk', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+    if (host.includes('weixin') || host.includes('wechat')) return { source: 'WeChat', medium: 'social', campaign: '', channel: 'Social', method: 'referrer' }
+
+    return { source: host, medium: 'referral', campaign: '', channel: 'Referral', method: 'referrer' }
+  } catch {
+    return { source: 'Unknown', medium: 'referral', campaign: '', channel: 'Referral', method: 'referrer' }
+  }
+}
+
+/**
  * 计算行为流（用户浏览路径）
  */
 function calculateBehaviorFlow(events) {
@@ -71,11 +178,14 @@ function calculateBehaviorFlow(events) {
   events.forEach(event => {
     if (event.sessionId && event.event === 'page_view') {
       if (!sessions[event.sessionId]) {
+        const sa = event.source_attribution || {}
         sessions[event.sessionId] = {
           pages: [],
           referrer: event.referrer || '', // 记录会话的第一个referrer作为访问来源（fallback）
-          trafficSource: event.traffic_source || '', // 优先使用前端识别的来源
-          trafficChannel: event.traffic_channel || '' // 可选：渠道（Direct/Organic/Social/Referral/Paid...）
+          // 优先使用后端/前端的统一归因字段，其次再 fallback 到旧字段
+          sourceAttribution: sa,
+          trafficSource: sa.source || event.traffic_source || '', // 兼容旧字段
+          trafficChannel: sa.channel || event.traffic_channel || '' // 兼容旧字段
         }
       }
       sessions[event.sessionId].pages.push({
@@ -95,6 +205,16 @@ function calculateBehaviorFlow(events) {
       if (!sessions[event.sessionId].trafficChannel && event.traffic_channel) {
         sessions[event.sessionId].trafficChannel = event.traffic_channel
       }
+      // 如果还没有 sourceAttribution，用第一个有值的事件
+      if (
+        (!sessions[event.sessionId].sourceAttribution || !sessions[event.sessionId].sourceAttribution.source) &&
+        event.source_attribution &&
+        event.source_attribution.source
+      ) {
+        sessions[event.sessionId].sourceAttribution = event.source_attribution
+        sessions[event.sessionId].trafficSource = event.source_attribution.source
+        sessions[event.sessionId].trafficChannel = event.source_attribution.channel || sessions[event.sessionId].trafficChannel
+      }
     }
   })
 
@@ -108,7 +228,7 @@ function calculateBehaviorFlow(events) {
     // 按时间排序
     session.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
     
-    // 统计访问来源（优先使用前端识别的 traffic_source；否则用 referrer 推断）
+    // 统计访问来源（优先使用 source_attribution.source；否则用 referrer 推断）
     const referrer = sessionData.referrer || ''
     const trafficSource = sessionData.trafficSource || ''
     let sourceLabel = trafficSource || '直接访问'
@@ -241,7 +361,7 @@ function calculateTrafficChannels(events) {
 
   const byChannel = {}
   Object.values(firstPageViewBySession).forEach(e => {
-    const channel = e.traffic_channel || (e.referrer ? 'Referral' : 'Direct')
+    const channel = e.source_attribution?.channel || e.traffic_channel || (e.referrer ? 'Referral' : 'Direct')
     byChannel[channel] = (byChannel[channel] || 0) + 1
   })
 
@@ -988,6 +1108,32 @@ app.post('/api/track', async (req, res) => {
       id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       clientIp: clientIp
     }
+
+    // ===== Server-side Source Attribution (UTM > UA > Referrer) =====
+    // 复刻参考仓库的逻辑：即使前端没带来源字段，后端也能归因
+    const userAgent =
+      eventData?.device?.userAgent ||
+      req.headers['user-agent'] ||
+      ''
+    const currentUrl = eventData.url || ''
+    const referrer = eventData.referrer || ''
+    const sourceAttribution = normalizeSourceAttribution({ currentUrl, referrer, userAgent })
+
+    // 确保 UA 会被持久化到数据库（db.js 只会从 eventData.device.userAgent 写入 device_userAgent 列）
+    if (!eventData.device || typeof eventData.device !== 'object') {
+      eventData.device = {}
+    }
+    if (!eventData.device.userAgent && userAgent) {
+      eventData.device.userAgent = userAgent
+    }
+
+    // 写入统一字段，供后续行为流/统计直接使用
+    eventData.source_attribution = sourceAttribution
+    // 兼容旧字段（让现有仪表盘/逻辑也能直接显示）
+    eventData.client_app = detectClientAppFromUserAgent(userAgent) || eventData.client_app || ''
+    eventData.traffic_source = sourceAttribution.source
+    eventData.traffic_medium = sourceAttribution.medium
+    eventData.traffic_channel = sourceAttribution.channel
 
     // 验证必要字段
     if (!eventData.event) {
