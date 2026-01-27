@@ -213,6 +213,64 @@ function detectInAppSource(userAgent = '') {
   return ''
 }
 
+/**
+ * 根据优先级生成统一的来源归因
+ * Priority 1: UTM
+ * Priority 2: User-Agent (client_app)
+ * Priority 3: Referrer
+ */
+function buildSourceAttribution({ params, clientApp, referrer, currentHost }) {
+  // UTM 优先
+  if (params.utm_source) {
+    return {
+      source: params.utm_source,
+      medium: params.utm_medium || '(not set)',
+      channel: channelFromMedium(params.utm_medium, params.utm_source),
+      method: 'utm'
+    }
+  }
+
+  // UA 兜底（微信/钉钉/QQ...）
+  if (clientApp) {
+    return {
+      source: clientApp,
+      medium: 'social',
+      channel: 'Social',
+      method: 'user_agent'
+    }
+  }
+
+  // Referrer 兜底
+  const refHost = getReferrerHost(referrer)
+  if (refHost) {
+    // 内部跳转
+    if (currentHost && refHost === currentHost.toLowerCase()) {
+      return {
+        source: 'direct',
+        medium: '(none)',
+        channel: 'Direct',
+        method: 'referrer'
+      }
+    }
+    const domainParts = refHost.split('.')
+    const mainDomain = domainParts.length >= 2 ? domainParts.slice(-2).join('.') : refHost
+    return {
+      source: mainDomain.replace(/^www\./, ''),
+      medium: 'referral',
+      channel: 'Referral',
+      method: 'referrer'
+    }
+  }
+
+  // 全都没有 → Direct
+  return {
+    source: 'direct',
+    medium: '(none)',
+    channel: 'Direct',
+    method: 'none'
+  }
+}
+
 function getSessionAttribution() {
   if (typeof window === 'undefined') return {}
 
@@ -246,6 +304,12 @@ function getSessionAttribution() {
     const clientApp = detectInAppSource(entryUserAgent) // e.g. MacWechat / WeChat / DingTalk / ...
     const params = parseQueryParamsFromCurrentUrl()
     const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params })
+    const sourceAttribution = buildSourceAttribution({
+      params,
+      clientApp,
+      referrer: entryReferrer,
+      currentHost
+    })
 
     // 兜底：referrer 为空且无 UTM 时，尝试用 UA 识别 App 内置浏览器来源（微信/钉钉）
     // 这能覆盖“从微信/钉钉直接打开链接，referrer 被剥离”的常见场景
@@ -268,6 +332,7 @@ function getSessionAttribution() {
       entryReferrerHost,
       entryUserAgent,
       client_app: clientApp,
+      source_attribution: sourceAttribution,
       ...params,
       ...traffic,
       attributionVersion: 'v1'

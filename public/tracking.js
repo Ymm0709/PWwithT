@@ -104,6 +104,39 @@
     return '';
   }
 
+  function buildSourceAttribution({ params, clientApp, referrer, currentHost }) {
+    // UTM 优先
+    if (params.utm_source) {
+      return {
+        source: params.utm_source,
+        medium: params.utm_medium || '(not set)',
+        channel: channelFromMedium(params.utm_medium, params.utm_source),
+        method: 'utm'
+      };
+    }
+    // UA 识别
+    if (clientApp) {
+      return {
+        source: clientApp,
+        medium: 'social',
+        channel: 'Social',
+        method: 'user_agent'
+      };
+    }
+    // Referrer 兜底
+    const refHost = getReferrerHost(referrer);
+    if (refHost) {
+      if (currentHost && refHost === currentHost.toLowerCase()) {
+        return { source: 'direct', medium: '(none)', channel: 'Direct', method: 'referrer' };
+      }
+      const domainParts = refHost.split('.');
+      const mainDomain = domainParts.length >= 2 ? domainParts.slice(-2).join('.') : refHost;
+      return { source: mainDomain.replace(/^www\\./, ''), medium: 'referral', channel: 'Referral', method: 'referrer' };
+    }
+    // 全都没有 → Direct
+    return { source: 'direct', medium: '(none)', channel: 'Direct', method: 'none' };
+  }
+
   function classifyTraffic({ referrer, currentHost, utm_source, utm_medium, click_id_type }) {
     const refHost = getReferrerHost(referrer);
 
@@ -201,6 +234,12 @@
       const clientApp = detectInAppSource(entryUserAgent);
       const params = parseQueryParamsFromCurrentUrl();
       const traffic = classifyTraffic({ referrer: entryReferrer, currentHost, ...params });
+      const sourceAttribution = buildSourceAttribution({
+        params,
+        clientApp,
+        referrer: entryReferrer,
+        currentHost
+      });
 
       // 兜底：referrer 为空且无 UTM 时，用 UA 识别微信/钉钉内置浏览器来源
       if (
@@ -222,6 +261,7 @@
         entryReferrerHost,
         entryUserAgent,
         client_app: clientApp,
+        source_attribution: sourceAttribution,
         ...params,
         ...traffic,
         attributionVersion: 'v1'
